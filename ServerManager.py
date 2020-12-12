@@ -6,7 +6,7 @@ from os import path
 from time import sleep
 import sys
 from shlex import split
-
+import json
 
 # generic sever class
 class Server(object):
@@ -274,35 +274,34 @@ class ServerManager(object):
         return [{server_name: self._servers[server_name].write(message)} for server_name in self._servers.keys()]
 
     def output_all(self, value: bool):
-        return [{server_name: self._servers[serv_name].print_output(value)} for server_name in self._servers.keys()]
-
+        return [{server_name: self._servers[server_name].print_output(value)} for server_name in self._servers.keys()]
 
     def start(self, server_name: str):
-        if isinstance(serv_name, str):
+        if isinstance(server_name, str):
             serv = self._servers.get(server_name)
             if serv:
                 return serv.run()
 
     def shutdown(self, server_name: str):
-        if isinstance(serv_name, str):
+        if isinstance(server_name, str):
             serv = self._servers.get(server_name)
             if serv and serv.is_running() is True:
                 return serv.shutdown()
 
     def send(self, server_name: str, message: str):
-        if isinstance(serv_name, str) and type(message) == str:
+        if isinstance(server_name, str) and type(message) == str:
             serv = self._servers.get(server_name)
             if serv and serv.is_running() is True:
                 return serv.write(message)
 
     def read(self, server_name: str):
-        if isinstance(serv_name, str):
+        if isinstance(server_name, str):
             serv = self._servers.get(server_name)
             if serv and serv.is_running() is True:
                 return serv.read()
 
     def status(self, server_name: str, debug=False):
-        if isinstance(serv_name, str):
+        if isinstance(server_name, str):
             serv = self._servers.get(server_name)
             if serv:
                 return serv.status(debug)
@@ -326,14 +325,117 @@ class ServerManager(object):
     #     if not isinstance(value,  bool):
     #         raise ValueError("value must be bool")
 
-
     def server_names(self):
         return self._servers.keys()
 
 
 if __name__ == "__main__":
+    # new command structure
+    # command function definitions
+    TERM_ALL = "$all"
+    TERM_HELP = "$help"
+    CONSOLE_ALIAS = "<CONSOLE>:"
+
+    def run(args_list: list):
+        server_name = args_list[1]
+        if server_name == TERM_ALL:
+            print(CONSOLE_ALIAS, "Starting all")
+            man.start_all()
+        else:
+            print(f"{CONSOLE_ALIAS} Starting {server_name}")
+            man.start(server_name)
+
+    def close(args_list: list):
+        server_name = args_list[1]
+        if server_name == TERM_ALL:
+            print(CONSOLE_ALIAS, "Closing all")
+            man.shutdown_all()
+        else:
+            print(f"{CONSOLE_ALIAS} Closing {server_name}")
+            man.shutdown(server_name)
+
+    def status(args_list: list):
+        server_message = None
+        server_name = args_list[1]
+        if len(args_list) > 2:
+            server_message = args_list[2]
+        if server_name == TERM_ALL:
+            for serv_name in man.server_names():
+                if server_message == "debug":
+                    serv_status = man.status(serv_name, debug=True)
+                else:
+                    serv_status = man.status(serv_name)
+                print(f"{CONSOLE_ALIAS} PRINTING STATUS FOR {serv_name}")
+                for key in serv_status.keys():
+                    print(f"\t{key}: {serv_status.get(key)}")
+                print()
+        else:
+            if server_message == "debug":
+                serv_status = man.status(server_name, debug=True)
+            else:
+                serv_status = man.status(server_name)
+            print(f"{CONSOLE_ALIAS} PRINTING STATUS FOR {server_name}")
+            for key in serv_status.keys():
+                print(f">>\t{key}: {serv_status.get(key)}")
+
+    def write(args_list: list):
+        server_name = args_list[1]
+        server_message = None
+        if len(args_list) > 2:
+            server_message = " ".join(args_list[2:])
+        if server_message:
+            if server_name == TERM_ALL:
+                print(f'{CONSOLE_ALIAS} Writing \"{server_message}\" to all')
+                man.send_all(server_message)
+            else:
+                print(f'{CONSOLE_ALIAS} Writing \"{server_message}\" to {server_name}')
+                man.send(server_name, server_message)
+        else:
+            print(CONSOLE_ALIAS, "Please specify a message to write")
+
+    def do_output(args_list: list):
+        server_message = None
+        server_name = args_list[1]
+        if args_list > 2:
+            server_message = args_list[2]
+        if not server_message:
+            print(CONSOLE_ALIAS, "Please specify a value. (t)rue or (f)alse")
+            return
+        if server_name == TERM_ALL:
+            if server_message[0] == 't':
+                man.output_all(True)
+            elif server_message == 'f':
+                man.output_all(False)
+            else:
+                print(CONSOLE_ALIAS, "value must be (t)rue or (f)alse")
+                return
+        else:
+            if server_message[0] == 't':
+                man.output(server_name, True)
+            elif server_message[0] == 'f':
+                man.output(server_name, False)
+            else:
+                print(CONSOLE_ALIAS, "value must be (t)rue or (f)alse")
+                return
+
+    command_dict = {
+        'r': run,
+        'c': close,
+        's': status,
+        'w': write,
+        'o': do_output
+    }
+    # schema
+    {
+        "name": "",
+        "working_directory": "",
+        "shutdown_instructions": "" or ()
+    }
+
     if len(sys.argv) > 1:
-        pass
+        if path.exists(sys.argv[1]):
+            with open(sys.argv[1]) as f:
+                commands = json.load(f)
     try:
         commands = (
             {
@@ -348,15 +450,15 @@ if __name__ == "__main__":
             }
         )
         man = ServerManager(commands)
-        TERM_ALL = "$all"
-        TERM_HELP = "$help"
-        CONSOLE_ALIAS = "<CONSOLE>:"
+
         # man.start_all()
         # serv = Server(" ".join(['java', '-jar', r'C:\Users\jbloo\Downloads\server.jar', "-nogui"]),
         #               shutdown_instruction=("say SHUTTING DOWN", "say 5", "say 4", "say 3", "say 2", "say 1", "stop"))
         # serv.run()
         while 1:
             console_input = input().strip()
+            if not console_input:
+                continue
             if console_input[0] == 'q':
                 selection = input(CONSOLE_ALIAS + " Are you sure you want to quit?(Y/n): ")
                 if selection and selection[0] == "Y":
@@ -373,80 +475,15 @@ if __name__ == "__main__":
                 if not (name == TERM_ALL or name in man.server_names()):
                     print(f'{CONSOLE_ALIAS} \"{name}\" is not a valid server identity')
                     continue
-                message = None
-                if len(temp_list) > 2:
-                    message = temp_list[2]
 
-                # print(f'c= {command}, n= {name}, m= {message}')
-                if command[0] == 'r':
-                    if name == TERM_ALL:
-                        print(CONSOLE_ALIAS, "Starting all")
-                        man.start_all()
-                    else:
-                        print(f"{CONSOLE_ALIAS} Starting {name}")
-                        result = man.start(name)
-                elif command[0] == 'c':
-                    if name == TERM_ALL:
-                        print(CONSOLE_ALIAS, "Closing all")
-                        man.shutdown_all()
-                    else:
-                        print(f"{CONSOLE_ALIAS} Closing {name}")
-                        man.shutdown(name)
-                elif command[0] == 'w':
-                    if message:
-                        if name == TERM_ALL:
-                            print(f'{CONSOLE_ALIAS} Writing \"{message}\" to all')
-                            man.send_all(message)
-                        else:
-                            print(f'{CONSOLE_ALIAS} Writing \"{message}\" to {name}')
-                            man.send(name, message)
-                    else:
-                        print(CONSOLE_ALIAS, "Please specify a message to write")
-                elif command[0] == 's':
-                    if name == TERM_ALL:
-                        for serv_name in man.server_names():
-                            if message == "debug":
-                                serv_status = man.status(serv_name, debug=True)
-                            else:
-                                serv_status = man.status(serv_name)
-                            print(f"{CONSOLE_ALIAS} PRINTING STATUS FOR {serv_name}")
-                            for key in serv_status.keys():
-                                print(f"\t{key}: {serv_status.get(key)}")
-                            print()
-                    else:
-                        if message == "debug":
-                            serv_status = man.status(name, debug=True)
-                        else:
-                            serv_status = man.status(name)
-                        print(f"{CONSOLE_ALIAS} PRINTING STATUS FOR {name}")
-                        for key in serv_status.keys():
-                            print(f">>\t{key}: {serv_status.get(key)}")
-                elif command[0] == 'o':
-                    if not message:
-                        print(CONSOLE_ALIAS, "Please specify a value. (t)rue or (f)alse")
-                        continue
-                    if name == TERM_ALL:
-                        if message[0] == 't':
-                            man.output_all(True)
-                        elif message == 'f':
-                            man.output_all(False)
-                        else:
-                            print(CONSOLE_ALIAS, "value must be (t)rue or (f)alse")
-                            continue
-                    else:
-                        if message[0] == 't':
-                            man.output(name, True)
-                        elif message == 'f':
-                            man.output(name, False)
-                        else:
-                            print(CONSOLE_ALIAS, "value must be (t)rue or (f)alse")
-                            continue
-
+                result = command_dict.get(command[0].lower())
+                if result:
+                    result(temp_list)
                 else:
-                    print(CONSOLE_ALIAS, "INVALID COMMAND")
+                    print(CONSOLE_ALIAS, "Invalid command")
             else:
                 print(CONSOLE_ALIAS, "INVALID INPUT")
-                print(CONSOLE_ALIAS, "<command> <server name> <message>")
+                print(CONSOLE_ALIAS, "<command> <server name> <command specific>")
 
     finally:
         # serv.shutdown()
